@@ -33,7 +33,7 @@ usage() {
   codex-profile.sh .tmp exec -C /tmp --skip-git-repo-check --sandbox read-only "你好"
 
 加载 alias:
-  source "$HOME/.codex/scripts/codex-aliases.sh"
+  source ${HOME}/.codex/scripts/codex-aliases.sh
 EOF
   exit 2
 }
@@ -79,6 +79,21 @@ read_api_key() {
     exit 1
   }
   printf '%s' "${api_key}"
+}
+
+read_model_provider() {
+  local profile_config="${1}"
+  local provider
+
+  provider="$(sed -nE 's/^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*"([A-Za-z0-9_-]+)"[[:space:]]*(#.*)?$/\1/p' "${profile_config}" | head -n 1)"
+  if [[ -z "${provider}" && -f "${codex_root}/config.toml" ]]; then
+    provider="$(sed -nE 's/^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*"([A-Za-z0-9_-]+)"[[:space:]]*(#.*)?$/\1/p' "${codex_root}/config.toml" | head -n 1)"
+  fi
+  if [[ -z "${provider}" ]]; then
+    echo "无法从配置解析 model_provider: ${profile_config}" >&2
+    exit 1
+  fi
+  printf '%s' "${provider}"
 }
 
 state_database_path() {
@@ -274,6 +289,7 @@ api_key="$(read_api_key "${src_auth}")"
 export CODEX_API_KEY="${api_key}"
 export OPENAI_API_KEY="${api_key}"
 unset api_key
+provider_id="$(read_model_provider "${src_config}")"
 
 export CODEX_HOME="${codex_root}"
 CODEX_PROFILE_ARGS=("$@")
@@ -284,6 +300,8 @@ fi
 codex_command=(
   "${codex_bin}"
   -c 'shell_environment_policy.ignore_default_excludes=false'
+  -c "model_providers.${provider_id}.env_key=\"OPENAI_API_KEY\""
+  -c "model_providers.${provider_id}.requires_openai_auth=false"
   --disable shell_snapshot
   --profile "${profile}"
   "${CODEX_PROFILE_ARGS[@]}"

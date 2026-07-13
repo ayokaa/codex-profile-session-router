@@ -27,8 +27,7 @@ printf '%s\n' \
   'name = "test"' \
   'base_url = "http://127.0.0.1:9/v1"' \
   'wire_api = "responses"' \
-  'env_key = "OPENAI_API_KEY"' \
-  'requires_openai_auth = false' \
+  'requires_openai_auth = true' \
   >"${test_root}/example.config.toml"
 install -m 600 "${test_root}/config.toml" "${test_root}/default.config.toml"
 printf '%s\n' '{"OPENAI_API_KEY":"root-test-key"}' >"${test_root}/auth.json"

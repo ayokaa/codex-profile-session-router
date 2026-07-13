@@ -17,8 +17,8 @@ done
 profile_config="${CODEX_HOME}/${profile}.config.toml"
 [[ -f "${profile_config}" ]]
 grep -q 'model = "profile-model"' "${profile_config}"
-grep -q 'env_key = "OPENAI_API_KEY"' "${profile_config}"
-grep -q 'requires_openai_auth = false' "${profile_config}"
+printf '%s\n' "$@" | grep -qx 'model_providers.localhost.env_key="OPENAI_API_KEY"'
+printf '%s\n' "$@" | grep -qx 'model_providers.localhost.requires_openai_auth=false'
 
 if [[ -n "${FAKE_EXPECT_RESUME_ID:-}" ]]; then
   printf '%s\n' "$@" | grep -qx "${FAKE_EXPECT_RESUME_ID}"

@@ -24,7 +24,7 @@ auth.json.<name>
 Codex 交互式 TUI 创建内嵌 App Server 时禁用 `CODEX_API_KEY` 环境覆盖。如果 provider
 仍然设置 `requires_openai_auth = true`，模型请求会使用共享根 AuthManager。
 
-因此自定义 provider 使用：
+因此路由脚本根据当前 profile 的 `model_provider` 自动注入：
 
 ```toml
 env_key = "OPENAI_API_KEY"
@@ -32,7 +32,8 @@ requires_openai_auth = false
 ```
 
 provider 解析请求鉴权时会优先读取自己的 `env_key`，因此不会使用根 AuthManager 的
-token。`codex exec` 与 TUI 使用相同的 provider 请求鉴权逻辑。
+token。将规则放在脚本中还能保护后来新增但忘记配置 `env_key` 的 profile。
+`codex exec` 与 TUI 使用相同的 provider 请求鉴权逻辑。
 
 ## 会话发现
 

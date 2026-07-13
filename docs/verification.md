@@ -6,7 +6,7 @@
 
 - 固定 profile 到 auth 的映射；
 - `CODEX_API_KEY` 与 `OPENAI_API_KEY` 注入；
-- provider `env_key` 配置；
+- 对错误 provider auth 配置的自动 `env_key` 覆盖；
 - 显式 UUID 透传；
 - 旧 `config.toml.<name>` 不参与路由；
 - 自动命令与 Bash alias 生成。

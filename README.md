@@ -28,16 +28,17 @@ codex-work
   -> codex --profile work resume <UUID>
 ```
 
-交互式 Codex TUI 不使用 `CODEX_API_KEY` 覆盖共享 AuthManager，因此固定 profile 的
-provider 必须使用环境变量鉴权：
+交互式 Codex TUI 不使用 `CODEX_API_KEY` 覆盖共享 AuthManager，因此请求必须使用
+provider 环境变量鉴权：
 
 ```toml
 env_key = "OPENAI_API_KEY"
 requires_openai_auth = false
 ```
 
-这样普通新会话和 `resume` 都由当前 provider 直接读取当前进程的 key，不会回落到
-共享根 `auth.json`。
+路由脚本会读取当前 `model_provider` 并自动注入这两个设置。这样新增 profile 即使
+忘记声明，普通新会话和 `resume` 仍由当前 provider 读取当前进程的 key，不会回落
+到共享根 `auth.json`。
 
 ## 安装
 
