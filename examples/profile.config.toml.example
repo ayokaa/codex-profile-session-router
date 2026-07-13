@@ -1,0 +1,9 @@
+model = "example-model"
+model_provider = "example"
+
+[model_providers.example]
+name = "Example provider"
+base_url = "http://127.0.0.1:8000/v1"
+wire_api = "responses"
+env_key = "OPENAI_API_KEY"
+requires_openai_auth = false

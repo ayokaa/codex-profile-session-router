@@ -1,0 +1,13 @@
+.test-home/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+auth.json
+auth.json.*
+sessions/
+archived_sessions/
+log/
+logs/
+.locks/
+.backups/
+.tmp/
