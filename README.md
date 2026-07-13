@@ -48,7 +48,7 @@ requires_openai_auth = false
 然后在 `~/.codex` 创建固定 profile 和 auth。可以参考：
 
 - `examples/profile.config.toml.example`
-- `examples/auth.json.example`
+- `examples/credentials.example.json`
 
 安装自动命令：
 
