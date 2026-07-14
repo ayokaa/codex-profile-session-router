@@ -134,11 +134,26 @@ codex-sync-routes
 
 ## 测试
 
-测试完全使用临时目录和假凭证，不访问真实 API：
+完整测试套件使用临时目录和假凭证，不访问真实 API，包含隔离测试和真实 Codex CLI 测试：
 
 ```bash
 ./scripts/test-codex-profile.sh
 ```
+
+只运行快速隔离测试：
+
+```bash
+CODEX_PROFILE_TEST_SKIP_E2E=true ./scripts/test-codex-profile.sh
+```
+
+真实 Codex 端到端测试使用本机 `codex` 二进制和本地 mock Responses 服务，创建真实
+session 后通过 `codex-work` 和 `codex-default` 恢复同一个 UUID，不访问外部 API：
+
+```bash
+./scripts/test-codex-profile-e2e.sh
+```
+
+可用 `CODEX_PROFILE_E2E_CODEX_BIN` 指定 Codex 二进制，测试完成后会删除临时 `CODEX_HOME`。
 
 ## 限制
 

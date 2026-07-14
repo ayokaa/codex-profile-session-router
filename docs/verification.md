@@ -11,6 +11,17 @@
 - 旧 `config.toml.<name>` 不参与路由；
 - 自动命令与 Bash alias 生成。
 - fish `conf.d` 自动加载、PATH 命令发现、路由列表和参数透传。
+- `scripts/test-codex-profile.sh` 默认继续运行真实 Codex 端到端测试；设置
+  `CODEX_PROFILE_TEST_SKIP_E2E=true` 可跳过该阶段。
+
+## 真实 Codex 端到端测试
+
+`scripts/test-codex-profile-e2e.sh` 使用本机真实 Codex 二进制和本地 mock Responses 服务，覆盖：
+
+- 通过 fish 路由创建真实 session 并持久化 JSONL；
+- 通过 `codex-work` 和 `codex-default` 恢复同一个 UUID；
+- 两个 profile 的模型配置都实际出现在 Codex 请求中；
+- 测试使用临时 `CODEX_HOME`，不会访问外部 API 或修改真实会话。
 
 ## 源码行为验证
 

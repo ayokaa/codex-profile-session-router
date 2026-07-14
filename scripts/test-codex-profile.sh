@@ -95,4 +95,8 @@ if [[ -n "${CODEX_PROFILE_TEST_FISH_BIN:-}" ]]; then
     '
 fi
 
+if [[ "${CODEX_PROFILE_TEST_SKIP_E2E:-false}" != "true" ]]; then
+  "${source_root}/scripts/test-codex-profile-e2e.sh"
+fi
+
 echo "codex-profile tests: ok"
