@@ -9,7 +9,9 @@ mkdir -p "${test_root}/scripts"
 install -m 755 "${source_root}/scripts/codex-profile.sh" "${test_root}/scripts/codex-profile.sh"
 install -m 755 "${source_root}/scripts/codex-session-picker.sh" "${test_root}/scripts/codex-session-picker.sh"
 install -m 755 "${source_root}/scripts/codex-sync-commands.sh" "${test_root}/scripts/codex-sync-commands.sh"
+install -m 755 "${source_root}/scripts/install-codex-command-sync.sh" "${test_root}/scripts/install-codex-command-sync.sh"
 install -m 644 "${source_root}/scripts/codex-aliases.sh" "${test_root}/scripts/codex-aliases.sh"
+install -m 644 "${source_root}/scripts/codex-profile-commands.fish" "${test_root}/scripts/codex-profile-commands.fish"
 
 printf '%s\n' \
   'model = "base-model"' \
@@ -61,5 +63,36 @@ TEST_CODEX_ROOT="${test_root}" bash -c '
   alias codex-example >/dev/null
   alias codex-default >/dev/null
 '
+
+HOME="${test_root}" XDG_CONFIG_HOME="${test_root}/.config" \
+  "${test_root}/scripts/install-codex-command-sync.sh" >/dev/null
+[[ -f "${test_root}/.config/fish/conf.d/codex-profile-commands.fish" ]]
+grep -q 'set -gx PATH' "${test_root}/.config/fish/conf.d/codex-profile-commands.fish"
+
+if [[ -n "${CODEX_PROFILE_TEST_FISH_BIN:-}" ]]; then
+  fish_resume_id="019f5742-1549-7ad2-ae54-42a19dfa341"
+  sed -i 's/tui-model/profile-model/' "${test_root}/example.config.toml"
+  HOME="${test_root}" XDG_CONFIG_HOME="${test_root}/.config" TEST_RESUME_ID="${fish_resume_id}" \
+    "${CODEX_PROFILE_TEST_FISH_BIN}" --interactive -c '
+      test (command -s codex-example) = "$HOME/.local/bin/codex-example"; or begin
+        echo "fish resolved unexpected codex-example path: "(command -s codex-example) >&2
+        exit 1
+      end
+      test (command -s codex-default) = "$HOME/.local/bin/codex-default"; or begin
+        echo "fish resolved unexpected codex-default path: "(command -s codex-default) >&2
+        exit 1
+      end
+      codex-routes | string match -q "*example -> example.config.toml / auth.json.example*"; or begin
+        echo "fish route listing failed" >&2
+        exit 1
+      end
+      env CODEX_PROFILE_CODEX_BIN="$HOME/fake-codex" \
+        FAKE_EXPECT_RESUME_ID="$TEST_RESUME_ID" \
+        codex-example resume "$TEST_RESUME_ID" --all; or begin
+        echo "fish argument forwarding failed" >&2
+        exit 1
+      end
+    '
+fi
 
 echo "codex-profile tests: ok"

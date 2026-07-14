@@ -15,6 +15,9 @@ install -m 755 \
   "${repo_root}/scripts/test-codex-profile.sh" \
   "${target_scripts}/"
 install -m 644 "${repo_root}/scripts/codex-aliases.sh" "${target_scripts}/codex-aliases.sh"
+install -m 644 \
+  "${repo_root}/scripts/codex-profile-commands.fish" \
+  "${target_scripts}/codex-profile-commands.fish"
 install -m 755 \
   "${repo_root}/scripts/testdata/fake-codex-profile.sh" \
   "${target_scripts}/testdata/fake-codex-profile.sh"

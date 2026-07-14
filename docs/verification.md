@@ -10,6 +10,7 @@
 - 显式 UUID 透传；
 - 旧 `config.toml.<name>` 不参与路由；
 - 自动命令与 Bash alias 生成。
+- fish `conf.d` 自动加载、PATH 命令发现、路由列表和参数透传。
 
 ## 源码行为验证
 

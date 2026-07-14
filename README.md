@@ -67,6 +67,21 @@ requires_openai_auth = false
 ~/.local/bin/codex-sync-routes
 ```
 
+生成的包装命令是独立可执行文件，可以从 Bash、fish 或其他 shell 调用。安装器同时：
+
+- 在 `.bashrc` 安装 Bash 自动同步钩子；
+- 在 `~/.config/fish/conf.d/codex-profile-commands.fish` 安装 fish 集成；
+- 让 fish 启动时把 `~/.local/bin` 加入 PATH 并刷新路由命令。
+
+fish 不需要额外 alias：
+
+```fish
+codex-routes
+codex-work
+codex-work resume --all
+codex-sync-routes
+```
+
 ## 使用
 
 ```bash

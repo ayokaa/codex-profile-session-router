@@ -54,6 +54,12 @@ state_*.sqlite
 原生列表可能根据当前行为过滤结果，所以无参数 `resume`、`fork` 和 `--last` 由本地
 选择器直接查询 `threads` 表，取得 UUID 后再调用原生 Codex。
 
+## Shell 集成
+
+所有 `codex-*` 路由都是带 Bash shebang 的独立可执行文件。fish 只负责从 `conf.d`
+把 `~/.local/bin` 加入当前进程 PATH，并调用同一个同步脚本；路由、鉴权和会话选择
+不会在 fish 中重新实现，因此不同 shell 不会产生行为漂移。
+
 ## 并发
 
 不同 UUID 写入不同 JSONL，可正常并发。恢复已有 UUID 时，路由脚本持有：
