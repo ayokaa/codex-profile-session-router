@@ -7,7 +7,9 @@
 - 固定 profile 到 auth 的映射；
 - `CODEX_API_KEY` 与 `OPENAI_API_KEY` 注入；
 - 对错误 provider auth 配置的自动 `env_key` 覆盖；
+- 无参数 `resume --all` 原样交给 Codex，不预先注入 UUID；
 - 显式 UUID 透传；
+- `resume --last` 继续从共享 SQLite 解析并传入 UUID；
 - 旧 `config.toml.<name>` 不参与路由；
 - 自动命令与 Bash alias 生成。
 - fish `conf.d` 自动加载、PATH 命令发现、路由列表和参数透传。
@@ -25,9 +27,11 @@
 
 ## 源码行为验证
 
-实现依据 Codex 0.144.1 的以下行为：
+实现依据 Codex 0.144.6 的以下行为：
 
 - `--profile <name>` 加载 `$CODEX_HOME/<name>.config.toml`；
+- 无 UUID 的 `resume` 启动原生 TUI 会话选择器；
+- 本地原生选择器按当前 `model_provider` 查询会话，`--all` 只取消 cwd 过滤；
 - 本地 TUI 恢复时显式发送当前模型和 provider；
 - TUI 内嵌 App Server 禁用 `CODEX_API_KEY` AuthManager 环境覆盖；
 - provider `env_key` 生成的 Bearer auth 优先于共享 AuthManager；
@@ -41,3 +45,18 @@
 - Authorization 指纹来自当前 profile 对应 auth；
 - 请求模型来自当前 profile；
 - 测试不会访问真实 API 或写入真实会话目录。
+
+## 实际 TUI 验证
+
+将路由脚本安装到现有 `CODEX_HOME` 后，从已信任目录运行生成的后缀命令：
+
+```text
+codex-<profile> resume --all
+```
+
+在固定尺寸的真实伪终端中确认：
+
+- 显示 Codex 原生标题 `Resume a previous session`；
+- 显示原生 Filter、Sort 和退出操作提示；
+- 未选择或恢复任何会话，退出后没有残留 Codex 进程；
+- 共享 SQLite 索引的修改时间和文件大小保持不变。

@@ -51,8 +51,12 @@ archived_sessions/
 state_*.sqlite
 ```
 
-原生列表可能根据当前行为过滤结果，所以无参数 `resume`、`fork` 和 `--last` 由本地
-选择器直接查询 `threads` 表，取得 UUID 后再调用原生 Codex。
+无参数 `resume` 直接交给 Codex 原生会话选择 UI。Codex 本地原生列表按当前
+`model_provider` 过滤；`--all` 只取消工作目录过滤。因此使用相同 provider ID 的固定
+profile 可以在原生 UI 中互相看到会话，不同 provider ID 的旧会话需要显式 UUID。
+
+`fork` 和 `resume --last` 仍由本地选择器直接查询 `threads` 表。前者用于跨 provider
+选择后创建新 UUID，后者取得共享索引中的最新 UUID 后再调用原生 Codex。
 
 ## Shell 集成
 
@@ -62,13 +66,16 @@ state_*.sqlite
 
 ## 并发
 
-不同 UUID 写入不同 JSONL，可正常并发。恢复已有 UUID 时，路由脚本持有：
+不同 UUID 写入不同 JSONL，可正常并发。显式恢复 UUID 或通过 `resume --last` 解析出
+UUID 时，路由脚本持有：
 
 ```text
 $CODEX_HOME/.locks/sessions/<UUID>.lock
 ```
 
-第二个进程无法同时恢复同一 UUID。SQLite 并发仍由 Codex 自身管理。
+第二个进程无法同时恢复同一 UUID。无参数 `resume` 的选择发生在 Codex 进程内部，
+外层脚本无法提前获知 UUID，因此原生 UI 路径不持有该锁。SQLite 并发仍由 Codex
+自身管理。
 
 ## 配置安全
 

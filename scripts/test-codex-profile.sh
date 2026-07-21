@@ -45,7 +45,28 @@ route=(
 )
 
 resume_id="019f5742-1549-7ad2-ae54-42a19dfa340d"
+sqlite3 "${test_root}/state_5.sqlite" "
+  CREATE TABLE threads (
+    id TEXT PRIMARY KEY,
+    archived INTEGER NOT NULL DEFAULT 0,
+    preview TEXT,
+    first_user_message TEXT,
+    title TEXT,
+    source TEXT,
+    cwd TEXT,
+    updated_at INTEGER,
+    updated_at_ms INTEGER
+  );
+  INSERT INTO threads (
+    id, archived, preview, source, cwd, updated_at, updated_at_ms
+  ) VALUES (
+    '${resume_id}', 0, 'latest session', 'cli', '/tmp', 1, 1000
+  );
+"
+FAKE_EXPECT_NATIVE_RESUME=true "${route[@]}" resume --all
 FAKE_EXPECT_RESUME_ID="${resume_id}" "${route[@]}" resume "${resume_id}" --all
+FAKE_EXPECT_REWRITTEN_LAST=true FAKE_EXPECT_RESUME_ID="${resume_id}" \
+  "${route[@]}" resume --last --all
 
 FAKE_EDIT_PROFILE=true "${route[@]}" exec --skip-git-repo-check test
 grep -q 'model = "tui-model"' "${test_root}/example.config.toml"

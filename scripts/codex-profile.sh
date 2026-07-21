@@ -185,6 +185,11 @@ prepare_root_resume() {
     return 0
   fi
 
+  if [[ "${action}" == "resume" ]]; then
+    CODEX_PROFILE_ARGS=("${original[@]}")
+    return 0
+  fi
+
   if has_resume_session_argument "${original[@]:1}"; then
     CODEX_PROFILE_ARGS=("${original[@]}")
     return 0

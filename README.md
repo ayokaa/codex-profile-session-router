@@ -3,9 +3,11 @@
 在不修改 Codex 源码的前提下，让多个固定 profile：
 
 - 共享同一个 `CODEX_HOME`、会话目录和 SQLite 索引；
-- 在 `resume`/`fork` 时跨 profile 选择任意历史会话；
+- 无参数 `resume` 使用 Codex 原生会话选择 UI；
+- 相同 `model_provider` 的 profile 可在原生 UI 中互相看到会话；
+- `fork` 和 `resume --last` 继续跨 provider 查询共享索引；
 - 恢复后继续使用当前 profile 的模型、URL 和 API key；
-- 防止两个进程同时恢复并写入同一个 UUID。
+- 显式 UUID 和 `resume --last` 防止两个进程同时恢复同一个会话。
 
 ## 设计
 
@@ -24,8 +26,8 @@ codex-work
   -> codex-profile.sh work
   -> 读取 auth.json.work
   -> 设置当前进程的 OPENAI_API_KEY
-  -> 从共享 SQLite 选择 UUID
-  -> codex --profile work resume <UUID>
+  -> codex --profile work resume
+  -> Codex 原生 UI 从共享索引选择会话
 ```
 
 交互式 Codex TUI 不使用 `CODEX_API_KEY` 覆盖共享 AuthManager，因此请求必须使用
@@ -88,10 +90,10 @@ codex-sync-routes
 # 启动新会话
 codex-work
 
-# 当前目录选择共享会话
+# 当前目录使用 Codex 原生 UI 选择会话
 codex-work resume
 
-# 所有目录选择共享会话
+# 原生 UI 显示所有目录（仍按当前 model_provider 过滤）
 codex-work resume --all
 
 # 恢复最新会话
@@ -114,9 +116,10 @@ codex-sync-routes
 ## 会话安全
 
 - 不修改已有 JSONL 消息或历史元数据。
-- 不根据历史 provider 过滤会话。
-- 显式恢复 UUID 时持有进程锁，避免两个进程同时追加同一个 JSONL。
-- 不带 UUID 的 `resume` 和 `--last` 先由只读 SQLite 选择器解析成 UUID。
+- 无参数 `resume` 直接使用 Codex 原生 UI；原生 UI 会按当前 `model_provider` 过滤。
+- 显式恢复 UUID 和 `resume --last` 时持有进程锁，避免两个进程同时追加同一个 JSONL。
+- `resume --last` 先由只读 SQLite 选择器解析成 UUID。
+- 原生 UI 在 Codex 进程内完成选择，外层脚本无法得知 UUID，因此该路径不加 UUID 锁。
 - `fork` 会创建新 UUID，因此不需要占用原会话的写锁。
 - API key 只注入当前 Codex 进程。
 - 启用默认敏感环境变量排除并禁用 shell snapshot，避免 key 进入工具 shell 或快照。
@@ -158,6 +161,9 @@ session 后通过 `codex-work` 和 `codex-default` 恢复同一个 UUID，不访
 ## 限制
 
 - 固定 profile 会叠加在根 `config.toml` 上；profile 未声明的通用字段继续继承根配置。
+- Codex 原生 resume UI 按当前 `model_provider` 过滤；`--all` 只取消目录过滤。不同
+  provider 的旧会话需要显式传入 UUID，或通过 `fork` 的跨 provider 选择器查找。
+- 原生 UI 路径没有本项目额外提供的 UUID 级跨进程锁；显式 UUID 和 `--last` 不受影响。
 - 多个同名 profile 进程同时修改配置时，遵循 Codex 原生的最后写入者行为。
 - 显式 `--remote` 使用远端 App Server 配置，本地 profile 无法覆盖远端模型和 auth。
 - 插件目录和 ChatGPT 云功能仍可能使用共享根 AuthManager；这不影响自定义 provider 的
