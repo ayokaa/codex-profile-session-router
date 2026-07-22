@@ -1,62 +1,72 @@
-# 验证记录
+# Verification
 
-## 自动测试
+## Automated tests
 
-`scripts/test-codex-profile.sh` 覆盖：
+`scripts/test-codex-profile.sh` covers:
 
-- 固定 profile 到 auth 的映射；
-- `CODEX_API_KEY` 与 `OPENAI_API_KEY` 注入；
-- 对错误 provider auth 配置的自动 `env_key` 覆盖；
-- 无参数 `resume --all` 原样交给 Codex，不预先注入 UUID；
-- 显式 UUID 透传；
-- `resume --last` 继续从共享 SQLite 解析并传入 UUID；
-- 旧 `config.toml.<name>` 不参与路由；
-- 自动命令与 Bash alias 生成。
-- fish `conf.d` 自动加载、PATH 命令发现、路由列表和参数透传。
-- `scripts/test-codex-profile.sh` 默认继续运行真实 Codex 端到端测试；设置
-  `CODEX_PROFILE_TEST_SKIP_E2E=true` 可跳过该阶段。
+- fixed profile → auth mapping;
+- `CODEX_API_KEY` and `OPENAI_API_KEY` injection;
+- automatic `env_key` override for incorrect provider auth config;
+- bare `resume --all` passed through to Codex with no pre-injected UUID;
+- explicit UUID passthrough;
+- `resume --last` still resolved from shared SQLite and rewritten to a UUID;
+- legacy `config.toml.<name>` not used as a route source file;
+- auto-generated commands and Bash aliases;
+- fish `conf.d` autoload, PATH discovery, route listing, and argument forwarding.
 
-## 真实 Codex 端到端测试
+By default the suite also runs the real Codex end-to-end tests. Set
+`CODEX_PROFILE_TEST_SKIP_E2E=true` to skip that stage.
 
-`scripts/test-codex-profile-e2e.sh` 使用本机真实 Codex 二进制和本地 mock Responses 服务，覆盖：
+## Real Codex end-to-end tests
 
-- 通过 fish 路由创建真实 session 并持久化 JSONL；
-- 通过 `codex-work` 和 `codex-default` 恢复同一个 UUID；
-- 两个 profile 的模型配置都实际出现在 Codex 请求中；
-- 测试使用临时 `CODEX_HOME`，不会访问外部 API 或修改真实会话。
+`scripts/test-codex-profile-e2e.sh` uses the local real Codex binary and a local
+mock Responses server. It covers:
 
-## 源码行为验证
+- creating a real session through a fish route and persisting JSONL;
+- resuming the same UUID via `codex-work` and `codex-default`;
+- both profiles’ model settings appearing in actual Codex requests;
+- a temporary `CODEX_HOME` so no external API is hit and real sessions are not
+  modified.
 
-实现依据 Codex 0.144.6 的以下行为：
+Optional: `CODEX_PROFILE_E2E_CODEX_BIN` / `CODEX_PROFILE_E2E_FISH_BIN` to pin
+binaries.
 
-- `--profile <name>` 加载 `$CODEX_HOME/<name>.config.toml`；
-- 无 UUID 的 `resume` 启动原生 TUI 会话选择器；
-- 本地原生选择器按当前 `model_provider` 查询会话，`--all` 只取消 cwd 过滤；
-- 本地 TUI 恢复时显式发送当前模型和 provider；
-- TUI 内嵌 App Server 禁用 `CODEX_API_KEY` AuthManager 环境覆盖；
-- provider `env_key` 生成的 Bearer auth 优先于共享 AuthManager；
-- 显式模型/provider 覆盖存在时，不恢复历史会话的模型/provider。
+## Source behavior assumptions
 
-## 隔离验证
+Implementation targets Codex 0.144.6 behavior:
 
-使用本地 mock endpoint 和假 key 验证：
+- `--profile <name>` loads `$CODEX_HOME/<name>.config.toml`;
+- `resume` without a UUID opens the native TUI session picker;
+- the local native picker queries sessions by current `model_provider`; `--all`
+  only drops the cwd filter;
+- local TUI resume explicitly sends the current model and provider;
+- TUI embedded App Server disables `CODEX_API_KEY` AuthManager env overrides;
+- Bearer auth from provider `env_key` takes precedence over the shared
+  AuthManager;
+- when explicit model/provider overrides are present, historical session
+  model/provider are not restored.
 
-- 请求发往当前 profile 的 URL，而不是根配置 URL；
-- Authorization 指纹来自当前 profile 对应 auth；
-- 请求模型来自当前 profile；
-- 测试不会访问真实 API 或写入真实会话目录。
+## Isolated verification
 
-## 实际 TUI 验证
+With a local mock endpoint and fake keys:
 
-将路由脚本安装到现有 `CODEX_HOME` 后，从已信任目录运行生成的后缀命令：
+- requests go to the current profile URL, not the root config URL;
+- Authorization fingerprints match the current profile auth;
+- request model comes from the current profile;
+- tests never call a real API or write into a real session directory.
+
+## Live TUI verification
+
+After installing the route scripts into an existing `CODEX_HOME`, from a trusted
+directory run a generated suffix command:
 
 ```text
 codex-<profile> resume --all
 ```
 
-在固定尺寸的真实伪终端中确认：
+On a real fixed-size pseudo-TTY confirm:
 
-- 显示 Codex 原生标题 `Resume a previous session`；
-- 显示原生 Filter、Sort 和退出操作提示；
-- 未选择或恢复任何会话，退出后没有残留 Codex 进程；
-- 共享 SQLite 索引的修改时间和文件大小保持不变。
+- Codex native title `Resume a previous session` is shown;
+- native Filter, Sort, and quit hints appear;
+- no session is selected or resumed, and no Codex process remains after quit;
+- shared SQLite index mtime and size stay unchanged.
