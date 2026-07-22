@@ -1,65 +1,62 @@
 # Codex Profile Session Router
 
-在不修改 Codex 源码的前提下，让多个固定 profile：
+Without modifying Codex source, multiple fixed profiles can:
 
-- 共享同一个 `CODEX_HOME`、会话目录和 SQLite 索引；
-- 无参数 `resume` 使用 Codex 原生会话选择 UI；
-- 相同 `model_provider` 的 profile 可在原生 UI 中互相看到会话；
-- `fork` 和 `resume --last` 继续跨 provider 查询共享索引；
-- 恢复后继续使用当前 profile 的模型、URL 和 API key；
-- 显式 UUID 和 `resume --last` 防止两个进程同时恢复同一个会话。
+- share one `CODEX_HOME`, session directory, and SQLite index;
+- use Codex’s native session picker for bare `resume`;
+- see each other’s sessions in the native UI when they share the same `model_provider`;
+- keep `fork` and `resume --last` querying the shared index across providers;
+- keep using the current profile’s model, URL, and API key after resume;
+- take a process lock on explicit UUIDs and `resume --last` so two processes do not resume the same session at once.
 
-## 设计
+## Design
 
-每个路由由一组固定文件组成：
+Each route is a fixed pair of files:
 
 ```text
 default.config.toml + auth.json
 work.config.toml     + auth.json.work
-lab.config.toml     + auth.json.lab
+lab.config.toml      + auth.json.lab
 ```
 
-以 `codex-work resume` 为例：
+Example flow for `codex-work resume`:
 
 ```text
 codex-work
   -> codex-profile.sh work
-  -> 读取 auth.json.work
-  -> 设置当前进程的 OPENAI_API_KEY
+  -> read auth.json.work
+  -> set OPENAI_API_KEY for this process
   -> codex --profile work resume
-  -> Codex 原生 UI 从共享索引选择会话
+  -> Codex native UI selects a session from the shared index
 ```
 
-交互式 Codex TUI 不使用 `CODEX_API_KEY` 覆盖共享 AuthManager，因此请求必须使用
-provider 环境变量鉴权：
+The interactive Codex TUI does not let `CODEX_API_KEY` override the shared AuthManager, so requests must authenticate via the provider environment key:
 
 ```toml
 env_key = "OPENAI_API_KEY"
 requires_openai_auth = false
 ```
 
-路由脚本会读取当前 `model_provider` 并自动注入这两个设置。这样新增 profile 即使
-忘记声明，普通新会话和 `resume` 仍由当前 provider 读取当前进程的 key，不会回落
-到共享根 `auth.json`。
+The route script reads the current `model_provider` and injects both settings automatically. New profiles that omit them still use the current process key for new sessions and `resume`, instead of falling back to the shared root `auth.json`.
 
-## 安装
+## Install
 
 ```bash
 ./install.sh
 ```
 
-然后在 `~/.codex` 创建固定 profile 和 auth。可以参考：
+Then create fixed profiles and auth under `~/.codex`. See:
 
 - `examples/profile.config.toml.example`
 - `examples/credentials.example.json`
 
-安装自动命令：
+Install the command wrappers:
 
 ```bash
 ~/.codex/scripts/install-codex-command-sync.sh
 ```
 
-它会生成：
+This generates:
 
 ```text
 ~/.local/bin/codex-default
@@ -69,13 +66,15 @@ requires_openai_auth = false
 ~/.local/bin/codex-sync-routes
 ```
 
-生成的包装命令是独立可执行文件，可以从 Bash、fish 或其他 shell 调用。安装器同时：
+(Wrappers appear for every paired `<name>.config.toml` + `auth.json.<name>` under `~/.codex`; `default` uses root `auth.json`.)
 
-- 在 `.bashrc` 安装 Bash 自动同步钩子；
-- 在 `~/.config/fish/conf.d/codex-profile-commands.fish` 安装 fish 集成；
-- 让 fish 启动时把 `~/.local/bin` 加入 PATH 并刷新路由命令。
+Generated wrappers are standalone executables and work from Bash, fish, or other shells. The installer also:
 
-fish 不需要额外 alias：
+- installs a Bash auto-sync hook in `.bashrc`;
+- installs fish integration at `~/.config/fish/conf.d/codex-profile-commands.fish`;
+- ensures fish startup adds `~/.local/bin` to `PATH` and refreshes route commands.
+
+No extra fish aliases are required:
 
 ```fish
 codex-routes
@@ -84,89 +83,85 @@ codex-work resume --all
 codex-sync-routes
 ```
 
-## 使用
+## Usage
 
 ```bash
-# 启动新会话
+# start a new session
 codex-work
 
-# 当前目录使用 Codex 原生 UI 选择会话
+# pick a session for the current directory with Codex native UI
 codex-work resume
 
-# 原生 UI 显示所有目录（仍按当前 model_provider 过滤）
+# native UI shows all directories (still filtered by current model_provider)
 codex-work resume --all
 
-# 恢复最新会话
+# resume the latest session
 codex-work resume --last --all
 
-# 显式 UUID
+# explicit UUID
 codex-work resume 00000000-0000-0000-0000-000000000000
 
-# Fork 使用同样的跨 profile 选择逻辑
+# fork uses the same cross-profile selection logic
 codex-work fork --all
 ```
 
-查看和刷新路由：
+List and refresh routes:
 
 ```bash
 codex-routes
 codex-sync-routes
 ```
 
-## 会话安全
+## Session safety
 
-- 不修改已有 JSONL 消息或历史元数据。
-- 无参数 `resume` 直接使用 Codex 原生 UI；原生 UI 会按当前 `model_provider` 过滤。
-- 显式恢复 UUID 和 `resume --last` 时持有进程锁，避免两个进程同时追加同一个 JSONL。
-- `resume --last` 先由只读 SQLite 选择器解析成 UUID。
-- 原生 UI 在 Codex 进程内完成选择，外层脚本无法得知 UUID，因此该路径不加 UUID 锁。
-- `fork` 会创建新 UUID，因此不需要占用原会话的写锁。
-- API key 只注入当前 Codex 进程。
-- 启用默认敏感环境变量排除并禁用 shell snapshot，避免 key 进入工具 shell 或快照。
+- Does not rewrite existing JSONL messages or history metadata.
+- Bare `resume` uses Codex native UI; the native list is filtered by the current `model_provider`.
+- Explicit UUID resume and `resume --last` hold a process lock so two processes do not append the same JSONL at once.
+- `resume --last` is resolved to a UUID first by a read-only SQLite selector.
+- Native UI selection happens inside the Codex process; the outer script never learns the UUID, so that path has no UUID lock.
+- `fork` creates a new UUID, so it does not take the original session’s write lock.
+- API keys are injected only into the current Codex process.
+- Default sensitive-env excludes stay enabled and shell snapshots are disabled so keys do not leak into tool shells or snapshots.
 
-## 旧会话迁移
+## Migrating old sessions
 
-如果此前使用过 `~/.codex/shared`，可以先审查并执行：
+If you previously used `~/.codex/shared`, review and run:
 
 ```bash
 ~/.codex/scripts/codex-migrate-to-root.sh
 ```
 
-迁移脚本使用 `--ignore-existing` 和 `INSERT OR IGNORE`，不会覆盖根目录已有会话；执行
-前仍建议自行备份整个 `~/.codex`。
+The migration uses `--ignore-existing` and `INSERT OR IGNORE`, so it will not overwrite sessions already under the root. Back up all of `~/.codex` before running it.
 
-## 测试
+## Tests
 
-完整测试套件使用临时目录和假凭证，不访问真实 API，包含隔离测试和真实 Codex CLI 测试：
+The full suite uses temp dirs and fake credentials, never real APIs. It includes isolated tests and real Codex CLI tests:
 
 ```bash
 ./scripts/test-codex-profile.sh
 ```
 
-只运行快速隔离测试：
+Fast isolated tests only:
 
 ```bash
 CODEX_PROFILE_TEST_SKIP_E2E=true ./scripts/test-codex-profile.sh
 ```
 
-真实 Codex 端到端测试使用本机 `codex` 二进制和本地 mock Responses 服务，创建真实
-session 后通过 `codex-work` 和 `codex-default` 恢复同一个 UUID，不访问外部 API：
+Real Codex end-to-end tests use the local `codex` binary and a local mock Responses server. They create a real session, then resume the same UUID via `codex-work` and `codex-default`, with no external API calls:
 
 ```bash
 ./scripts/test-codex-profile-e2e.sh
 ```
 
-可用 `CODEX_PROFILE_E2E_CODEX_BIN` 指定 Codex 二进制，测试完成后会删除临时 `CODEX_HOME`。
+Set `CODEX_PROFILE_E2E_CODEX_BIN` to point at a specific Codex binary. The temporary `CODEX_HOME` is removed when the test finishes.
 
-## 限制
+## Limitations
 
-- 固定 profile 会叠加在根 `config.toml` 上；profile 未声明的通用字段继续继承根配置。
-- Codex 原生 resume UI 按当前 `model_provider` 过滤；`--all` 只取消目录过滤。不同
-  provider 的旧会话需要显式传入 UUID，或通过 `fork` 的跨 provider 选择器查找。
-- 原生 UI 路径没有本项目额外提供的 UUID 级跨进程锁；显式 UUID 和 `--last` 不受影响。
-- 多个同名 profile 进程同时修改配置时，遵循 Codex 原生的最后写入者行为。
-- 显式 `--remote` 使用远端 App Server 配置，本地 profile 无法覆盖远端模型和 auth。
-- 插件目录和 ChatGPT 云功能仍可能使用共享根 AuthManager；这不影响自定义 provider 的
-  模型请求。
+- Fixed profiles layer on top of root `config.toml`; fields not set in a profile still inherit from the root.
+- Codex native resume UI filters by current `model_provider`; `--all` only drops the directory filter. Old sessions from a different provider need an explicit UUID, or the cross-provider selector used by `fork`.
+- The native UI path does not get this project’s extra UUID-level cross-process lock; explicit UUIDs and `--last` do.
+- Concurrent edits to the same profile config by multiple processes follow Codex’s last-writer-wins behavior.
+- Explicit `--remote` uses remote App Server config; local profiles cannot override remote model and auth.
+- Plugin dirs and ChatGPT cloud features may still use the shared root AuthManager; that does not affect model requests for custom providers.
 
-详细设计见 `docs/design.md`，验证记录见 `docs/verification.md`。
+See `docs/design.md` for design detail and `docs/verification.md` for verification notes.
