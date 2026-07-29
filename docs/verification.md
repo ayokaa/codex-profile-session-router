@@ -13,6 +13,7 @@
 - legacy `config.toml.<name>` not used as a route source file;
 - auto-generated commands and Bash aliases;
 - fish `conf.d` autoload, PATH discovery, route listing, and argument forwarding.
+- shared config sync on route refresh: protected model/provider fields kept, shared keys overwritten and appended, in-section kv merge, source-only sections appended, top-level keys stay before tables, idempotent re-run, and no standalone `codex-sync-config` command generated.
 
 By default the suite also runs the real Codex end-to-end tests. Set
 `CODEX_PROFILE_TEST_SKIP_E2E=true` to skip that stage.
