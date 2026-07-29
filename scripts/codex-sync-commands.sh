@@ -109,6 +109,10 @@ sync_commands() {
 
   printf '%s\n' "${current_commands[@]}" > "${manifest_path}"
 
+  if [[ -x "${script_dir}/codex-sync-config.sh" ]]; then
+    "${script_dir}/codex-sync-config.sh" --quiet || true
+  fi
+
   if [[ "${quiet}" != "true" ]]; then
     printf '已同步命令到 %s\n' "${target_dir}"
     printf '当前命令:\n'

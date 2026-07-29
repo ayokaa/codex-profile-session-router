@@ -9,6 +9,7 @@ mkdir -p "${test_root}/scripts"
 install -m 755 "${source_root}/scripts/codex-profile.sh" "${test_root}/scripts/codex-profile.sh"
 install -m 755 "${source_root}/scripts/codex-session-picker.sh" "${test_root}/scripts/codex-session-picker.sh"
 install -m 755 "${source_root}/scripts/codex-sync-commands.sh" "${test_root}/scripts/codex-sync-commands.sh"
+install -m 755 "${source_root}/scripts/codex-sync-config.sh" "${test_root}/scripts/codex-sync-config.sh"
 install -m 755 "${source_root}/scripts/install-codex-command-sync.sh" "${test_root}/scripts/install-codex-command-sync.sh"
 install -m 644 "${source_root}/scripts/codex-aliases.sh" "${test_root}/scripts/codex-aliases.sh"
 install -m 644 "${source_root}/scripts/codex-profile-commands.fish" "${test_root}/scripts/codex-profile-commands.fish"
@@ -115,6 +116,65 @@ if [[ -n "${CODEX_PROFILE_TEST_FISH_BIN:-}" ]]; then
       end
     '
 fi
+
+# refresh(codex-sync-commands)时自动同步配置
+cat >"${test_root}/config.toml" <<'EOF'
+model = "src-model"
+model_provider = "localhost"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+
+[features]
+plan_tool = true
+multi_agent = true
+
+[model_providers.localhost]
+name = "src"
+base_url = "https://src.example/v1"
+EOF
+
+cat >"${test_root}/sync-a.config.toml" <<'EOF'
+model = "a-model"
+model_provider = "acs"
+model_reasoning_effort = "low"
+
+[model_providers.acs]
+name = "acs"
+base_url = "https://acs.example/v1"
+
+[features]
+plan_tool = false
+js_repl = true
+EOF
+
+# refresh 生成 wrapper 同时自动同步配置
+HOME="${test_root}" "${test_root}/scripts/codex-sync-commands.sh" --target-dir "${test_root}/bin" --quiet
+
+# 受保护字段保留各 profile 自有值
+grep -q 'model = "a-model"' "${test_root}/sync-a.config.toml"
+grep -q 'model_provider = "acs"' "${test_root}/sync-a.config.toml"
+grep -q 'base_url = "https://acs.example/v1"' "${test_root}/sync-a.config.toml"
+# 通用 kv 被源覆盖
+grep -q 'model_reasoning_effort = "high"' "${test_root}/sync-a.config.toml"
+# 源独有通用 kv 追加
+grep -q 'sandbox_mode = "workspace-write"' "${test_root}/sync-a.config.toml"
+# 段内 kv:源覆盖同名、profile 独有保留、源独有追加
+grep -q 'plan_tool = true' "${test_root}/sync-a.config.toml"
+grep -q 'js_repl = true' "${test_root}/sync-a.config.toml"
+grep -q 'multi_agent = true' "${test_root}/sync-a.config.toml"
+# 源的受保护字段不泄漏
+! grep -q 'src-model' "${test_root}/sync-a.config.toml"
+! grep -q 'base_url = "https://src.example/v1"' "${test_root}/sync-a.config.toml"
+# 顶层 kv 必须在所有 table 段之前
+sync_a_model_line=$(grep -n '^model = ' "${test_root}/sync-a.config.toml" | head -1 | cut -d: -f1)
+sync_a_sec_line=$(grep -n '^\[' "${test_root}/sync-a.config.toml" | head -1 | cut -d: -f1)
+(( sync_a_model_line < sync_a_sec_line ))
+# 不再生成独立 codex-sync-config 命令
+[[ ! -e "${test_root}/bin/codex-sync-config" ]]
+# 幂等:再 refresh 一次,同步脚本应报告该 profile 无变更
+HOME="${test_root}" "${test_root}/scripts/codex-sync-commands.sh" --target-dir "${test_root}/bin" --quiet
+sync_out="$("${test_root}/scripts/codex-sync-config.sh")"
+echo "${sync_out}" | grep -q '无变更: sync-a.config.toml'
 
 if [[ "${CODEX_PROFILE_TEST_SKIP_E2E:-false}" != "true" ]]; then
   "${source_root}/scripts/test-codex-profile-e2e.sh"

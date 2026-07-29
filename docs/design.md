@@ -99,3 +99,25 @@ is never written into the profile. Launch flags also:
 
 The same user or root can still read process environment; that is the system
 boundary of env-var auth.
+
+## Config sync
+
+Every route refresh (`codex-sync-commands.sh`, run by `codex-sync-routes` and
+the shell startup hook) calls `codex-sync-config.sh`, which uses root
+`config.toml` as the authoritative source and incrementally syncs its shared
+settings into every `<name>.config.toml`.
+
+Protected fields stay per-profile:
+
+- top-level `model`, `model_provider`;
+- the whole `[model_providers.*]` section (so `base_url`, `wire_api`,
+  `requires_openai_auth`, etc. keep each profile's own values).
+
+Everything else is the shared sync region. The merge is incremental: source
+keys overwrite same-name profile keys (top-level and inside each table), source
+keys missing from the profile are appended, and profile keys absent from the
+source are left untouched. TOML syntax is preserved by emitting all top-level
+keys before any table section.
+
+Writes are atomic and back up to `<name>.config.toml.bak`; the run is a no-op
+when nothing changed. `--dry-run` previews the diff without writing.

@@ -112,6 +112,24 @@ codex-routes
 codex-sync-routes
 ```
 
+## Shared config sync
+
+Every route refresh (`codex-sync-routes`, or the shell startup hook) also syncs
+shared settings from `~/.codex/config.toml` into every `<name>.config.toml`:
+
+- Protected (each profile keeps its own): top-level `model`, `model_provider`,
+  and the whole `[model_providers.*]` section.
+- Incremental merge: source values override same-name profile keys; profile
+  keys absent from the source are kept.
+- Writes are atomic and back up to `<name>.config.toml.bak`; a no-op when
+  nothing changed.
+
+To preview without writing, run the script directly:
+
+```bash
+~/.codex/scripts/codex-sync-config.sh --dry-run
+```
+
 ## Session safety
 
 - Does not rewrite existing JSONL messages or history metadata.
@@ -158,6 +176,7 @@ Set `CODEX_PROFILE_E2E_CODEX_BIN` to point at a specific Codex binary. The tempo
 ## Limitations
 
 - Fixed profiles layer on top of root `config.toml`; fields not set in a profile still inherit from the root.
+- Shared config sync runs on every route refresh and assumes single-line `key = value` entries; multi-line arrays or strings are not merged. Source comments are not synced; each profile keeps its own. `[projects."..."]` and other non-model sections are treated as shared and synced.
 - Codex native resume UI filters by current `model_provider`; `--all` only drops the directory filter. Old sessions from a different provider need an explicit UUID, or the cross-provider selector used by `fork`.
 - The native UI path does not get this project’s extra UUID-level cross-process lock; explicit UUIDs and `--last` do.
 - Concurrent edits to the same profile config by multiple processes follow Codex’s last-writer-wins behavior.
