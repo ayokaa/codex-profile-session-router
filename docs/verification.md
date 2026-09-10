@@ -43,20 +43,25 @@ By default the suite also runs the real Codex end-to-end tests. Set
 `scripts/test-codex-profile-e2e.sh` uses the local real Codex binary and a local
 mock Responses server. It covers:
 
-- creating a real session through a fish route and persisting JSONL;
-- resuming the same UUID via `codex-work` and `codex-default` — the latter is
-  deliberate, it exercises the `default` route pairing with the root `auth.json`
-  that the guide otherwise discourages;
+- creating a real session through the generated command resolved from `PATH`, and
+  persisting JSONL;
+- resuming the same UUID through a sourced Bash alias (`codex-aliases.sh` in a
+  script file, so alias expansion is exercised), and once more through
+  `codex-default` — that name is deliberate, it exercises the `default` route
+  pairing with the root `auth.json` that the guide otherwise discourages;
+- fish as an optional third leg: without a fish binary the suite reports the skip
+  and still runs everything through Bash;
 - both profiles’ model settings appearing in actual Codex requests;
 - a temporary `CODEX_HOME` so no external API is hit and real sessions are not
   modified.
 
-Optional: `CODEX_PROFILE_E2E_CODEX_BIN` / `CODEX_PROFILE_E2E_FISH_BIN` to pin
-binaries.
+Optional: `CODEX_PROFILE_E2E_CODEX_BIN` pins the Codex binary, and
+`CODEX_PROFILE_E2E_FISH_BIN` supplies a fish binary to add the fish leg.
 
 ## Source behavior assumptions
 
-Implementation targets Codex 0.144.6 behavior (paths relative to `codex-rs/`):
+Re-read against Codex 0.154.0 during the provider-sharing work (paths relative
+to `codex-rs/`):
 
 - `--profile <name>` loads `$CODEX_HOME/<name>.config.toml` and layers it above
   root config (`config/src/config_layer_source.rs`);

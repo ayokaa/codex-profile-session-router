@@ -211,7 +211,7 @@ Fast isolated tests only:
 CODEX_PROFILE_TEST_SKIP_E2E=true ./scripts/test-codex-profile.sh
 ```
 
-Real Codex end-to-end tests use the local `codex` binary and a local mock Responses server. They create a real session, then resume the same UUID via `codex-work` and `codex-default`, with no external API calls:
+Real Codex end-to-end tests use the local `codex` binary and a local mock Responses server, so they make no external API calls. They create a real session through the generated command found on `PATH`, resume that UUID through a sourced Bash alias, and resume it once more via `codex-default`; fish adds a third leg when a fish binary is available.
 
 ```bash
 ./scripts/test-codex-profile-e2e.sh
