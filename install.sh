@@ -10,6 +10,7 @@ install -m 755 \
   "${repo_root}/scripts/codex-profile.sh" \
   "${repo_root}/scripts/codex-session-picker.sh" \
   "${repo_root}/scripts/codex-migrate-to-root.sh" \
+  "${repo_root}/scripts/codex-normalize-provider.sh" \
   "${repo_root}/scripts/codex-sync-commands.sh" \
   "${repo_root}/scripts/codex-sync-config.sh" \
   "${repo_root}/scripts/install-codex-command-sync.sh" \

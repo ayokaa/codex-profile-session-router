@@ -33,7 +33,10 @@ sql_text_literal() {
 }
 
 where_clause="archived = 0 AND COALESCE(NULLIF(preview, ''), NULLIF(first_user_message, ''), NULLIF(title, ''), '') <> ''"
-if [[ "${include_non_interactive}" != "true" ]]; then
+# 与 Codex 的 resume_source_kinds 对齐：subagent 行的 source 是 JSON，必须排除。
+if [[ "${include_non_interactive}" == "true" ]]; then
+  where_clause+=" AND source IN ('cli', 'vscode', 'exec', 'app_server')"
+else
   where_clause+=" AND source IN ('cli', 'vscode')"
 fi
 if [[ -n "${cwd_filter}" ]]; then
@@ -50,7 +53,8 @@ SELECT
   id,
   datetime(updated_at, 'unixepoch', 'localtime'),
   replace(replace(replace(replace(cwd, char(27), ''), char(13), ' '), char(9), ' '), char(10), ' '),
-  replace(replace(replace(replace(substr(COALESCE(NULLIF(preview, ''), NULLIF(first_user_message, ''), NULLIF(title, ''), '(无预览)'), 1, 100), char(27), ''), char(13), ' '), char(9), ' '), char(10), ' ')
+  replace(replace(replace(replace(substr(COALESCE(NULLIF(preview, ''), NULLIF(first_user_message, ''), NULLIF(title, ''), '(无预览)'), 1, 100), char(27), ''), char(13), ' '), char(9), ' '), char(10), ' '),
+  model_provider
 FROM threads
 WHERE ${where_clause}
 ORDER BY COALESCE(updated_at_ms, updated_at * 1000) DESC, id DESC
@@ -81,8 +85,8 @@ fi
 echo "可恢复会话（跨全部 provider，最多显示 ${limit} 条）:" >&2
 echo >&2
 for index in "${!rows[@]}"; do
-  IFS=$'\t' read -r thread_id updated_at cwd preview <<<"${rows[index]}"
-  printf '%3d) %s  %s  %s\n' "$((index + 1))" "${thread_id:0:8}" "${updated_at}" "${preview}" >&2
+  IFS=$'\t' read -r thread_id updated_at cwd preview provider <<<"${rows[index]}"
+  printf '%3d) %s  %s  %s  [%s]\n' "$((index + 1))" "${thread_id:0:8}" "${updated_at}" "${preview}" "${provider}" >&2
   printf '     %s\n' "${cwd}" >&2
 done
 
