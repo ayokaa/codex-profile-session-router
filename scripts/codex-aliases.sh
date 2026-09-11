@@ -23,6 +23,12 @@ _codex_alias_name() {
   printf 'codex-%s' "${route_name}"
 }
 
+# 登录态路由没有 auth.json.<name>，只认 <name>.auth-mode 这个持久化标记。
+_codex_route_is_login_mode() {
+  local mode_file="${_codex_root}/${1}.auth-mode"
+  [[ -f "${mode_file}" ]] && [[ "$(tr -d '[:space:]' <"${mode_file}")" == "login" ]]
+}
+
 codex_aliases_reload() {
   local alias_name alias_value auth_path base config_path route_name
 
@@ -43,7 +49,7 @@ codex_aliases_reload() {
     else
       auth_path="${_codex_root}/auth.json.${route_name}"
     fi
-    if [[ ! -f "${auth_path}" ]]; then
+    if [[ ! -f "${auth_path}" ]] && ! _codex_route_is_login_mode "${route_name}"; then
       continue
     fi
 

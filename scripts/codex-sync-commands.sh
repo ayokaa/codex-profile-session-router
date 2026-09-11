@@ -15,9 +15,10 @@ usage() {
   codex-sync-commands.sh [--target-dir DIR] [--quiet]
 
 说明:
-  扫描 ~/.codex 下成对存在的 <name>.config.toml 和 auth.json.<name>，
-  自动生成可执行命令到目标目录，例如:
-    codex-default
+  扫描 ~/.codex 下的路由并生成可执行命令到目标目录；路由要么是
+  <name>.config.toml 与 auth.json.<name> 成对，要么由 <name>.auth-mode
+  （内容为 login）标记为共享登录态路由（无需鉴权文件），例如:
+    codex-work
     codex-tmp
     codex-routes
 EOF
@@ -37,8 +38,15 @@ command_name_for_route() {
   printf 'codex-%s' "${route_name}"
 }
 
+# 登录态路由没有 auth.json.<name>，只认 <name>.auth-mode 这个持久化标记；
+# 环境变量 CODEX_PROFILE_AUTH 是一次性的，不能决定是否生成命令。
+route_is_login_mode() {
+  local mode_file="${codex_root}/${1}.auth-mode"
+  [[ -f "${mode_file}" ]] && [[ "$(tr -d '[:space:]' <"${mode_file}")" == "login" ]]
+}
+
 print_route_table() {
-  local auth_path base config_path profile
+  local auth_path auth_base base config_path profile
   shopt -s nullglob
   for config_path in "${codex_root}"/*.config.toml; do
     base="${config_path##*/}"
@@ -49,10 +57,15 @@ print_route_table() {
     else
       auth_path="${codex_root}/auth.json.${profile}"
     fi
+    auth_base="${auth_path##*/}"
     if [[ ! -f "${auth_path}" ]]; then
-      continue
+      if route_is_login_mode "${profile}"; then
+        auth_base="login"
+      else
+        continue
+      fi
     fi
-    printf '%s\t%s\t%s\n' "${profile}" "${base}" "${auth_path##*/}"
+    printf '%s\t%s\t%s\n' "${profile}" "${base}" "${auth_base}"
   done
   shopt -u nullglob
 }

@@ -16,9 +16,14 @@ if [[ ! -x "${real_codex}" ]]; then
   echo "real Codex binary not found; set CODEX_PROFILE_E2E_CODEX_BIN" >&2
   exit 2
 fi
-if [[ ! -x "${fish_bin}" ]]; then
-  echo "fish binary not found; set CODEX_PROFILE_E2E_FISH_BIN" >&2
+if ! "${real_codex}" --version >/dev/null 2>&1; then
+  echo "${real_codex} is not runnable (broken install, or a Windows-side shim); set CODEX_PROFILE_E2E_CODEX_BIN" >&2
   exit 2
+fi
+# fish 只是附加覆盖：生成的命令是独立可执行文件，Bash 侧不需要 fish 也能跑完整流程。
+use_fish="false"
+if [[ -x "${fish_bin}" ]]; then
+  use_fish="true"
 fi
 command -v jq >/dev/null || {
   echo "jq is required" >&2
@@ -48,6 +53,9 @@ install -m 755 \
   "${source_root}/scripts/codex-session-picker.sh" \
   "${source_root}/scripts/codex-sync-commands.sh" \
   "${source_root}/scripts/install-codex-command-sync.sh" \
+  "${test_root}/.codex/scripts/"
+install -m 644 \
+  "${source_root}/scripts/codex-aliases.sh" \
   "${test_root}/.codex/scripts/"
 install -m 644 \
   "${source_root}/scripts/codex-profile-commands.fish" \
@@ -113,9 +121,49 @@ run_fish_route() {
   fi
 }
 
+# 生成的命令是独立可执行文件：只要 ~/.local/bin 在 PATH 上就能按名字调用。
+run_path_route() {
+  local output_path="$1"
+  local route_name="$2"
+  shift 2
+  if ! HOME="${test_root}" XDG_CONFIG_HOME="${test_root}/.config" \
+    PATH="${test_root}/.local/bin:${PATH}" \
+    CODEX_PROFILE_CODEX_BIN="${real_codex}" \
+    "${route_name}" "$@" >"${output_path}" 2>"${output_path}.stderr"; then
+    cat "${output_path}.stderr" >&2
+    cat "${output_path}" >&2
+    return 1
+  fi
+}
+
+# 别名要在独立脚本文件里才可靠：非交互 bash 默认不展开别名，而且别名是在解析
+# 该行时展开的，所以 alias 与使用必须分处先后两次读取。
+alias_script="${test_root}/bash-alias-route.sh"
+cat >"${alias_script}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s expand_aliases
+# shellcheck disable=SC1091
+source "${test_root}/.codex/scripts/codex-aliases.sh"
+codex-work "\$@"
+EOF
+chmod 755 "${alias_script}"
+
+run_alias_route() {
+  local output_path="$1"
+  shift
+  if ! HOME="${test_root}" XDG_CONFIG_HOME="${test_root}/.config" \
+    CODEX_PROFILE_CODEX_BIN="${real_codex}" \
+    "${alias_script}" "$@" >"${output_path}" 2>"${output_path}.stderr"; then
+    cat "${output_path}.stderr" >&2
+    cat "${output_path}" >&2
+    return 1
+  fi
+}
+
 create_output="${test_root}/create.jsonl"
-run_fish_route "${create_output}" \
-  'exec codex-work exec --json --skip-git-repo-check -s read-only "create an e2e session"'
+run_path_route "${create_output}" codex-work \
+  exec --json --skip-git-repo-check -s read-only "create an e2e session"
 thread_id="$(jq -r -s '[.[] | select(.type == "thread.started") | .thread_id][0] // empty' "${create_output}")"
 if [[ ! "${thread_id}" =~ ^[0-9a-fA-F-]{36}$ ]]; then
   echo "real Codex did not create a thread" >&2
@@ -133,16 +181,22 @@ if [[ -z "${session_path}" ]]; then
 fi
 
 work_resume_output="${test_root}/work-resume.jsonl"
-run_fish_route "${work_resume_output}" \
-  "exec codex-work exec --json -s read-only resume ${thread_id} \"continue the e2e session from work\""
+run_alias_route "${work_resume_output}" \
+  exec --json -s read-only resume "${thread_id}" "continue the e2e session from work"
 jq -e -s 'any(.[]; .type == "turn.completed")' "${work_resume_output}" >/dev/null
 jq -e -s --arg thread_id "${thread_id}" \
   'any(.[]; .type == "thread.started" and .thread_id == $thread_id)' \
   "${work_resume_output}" >/dev/null
 
 default_resume_output="${test_root}/default-resume.jsonl"
-run_fish_route "${default_resume_output}" \
-  "exec codex-default exec --json -s read-only resume ${thread_id} \"continue the e2e session from default\""
+if [[ "${use_fish}" == "true" ]]; then
+  run_fish_route "${default_resume_output}" \
+    "exec codex-default exec --json -s read-only resume ${thread_id} \"continue the e2e session from default\""
+else
+  echo "note: no fish binary; skipping the fish integration leg" >&2
+  run_path_route "${default_resume_output}" codex-default \
+    exec --json -s read-only resume "${thread_id}" "continue the e2e session from default"
+fi
 jq -e -s 'any(.[]; .type == "turn.completed")' "${default_resume_output}" >/dev/null
 jq -e -s --arg thread_id "${thread_id}" \
   'any(.[]; .type == "thread.started" and .thread_id == $thread_id)' \

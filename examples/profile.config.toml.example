@@ -5,5 +5,25 @@ model_provider = "example"
 name = "Example provider"
 base_url = "http://127.0.0.1:8000/v1"
 wire_api = "responses"
+# apikey route (default): the route script injects env_key and
+# requires_openai_auth = false for the current model_provider anyway.
 env_key = "OPENAI_API_KEY"
 requires_openai_auth = false
+
+# ChatGPT login sessions: configure the shared provider once in the root
+# ~/.codex/config.toml (see the Auth modes section of the README) so bare `codex`
+# records the same model_provider id as this profile. A profile can also launch on
+# the shared login: write "login" into an <name>.auth-mode file next to it (that
+# file is also what registers the command and alias) and give the table
+# name = "OpenAI" with no base_url and no env_key, which lets Codex fall back to
+# the official ChatGPT backend URL from the login auth mode. The route script
+# refuses a login-mode launch while env_key or base_url is still set, because the
+# only credential that mode can send is your ChatGPT token.
+#
+# model = "example-model"
+# model_provider = "example"
+#
+# [model_providers.example]
+# name = "OpenAI"
+# wire_api = "responses"
+# requires_openai_auth = true

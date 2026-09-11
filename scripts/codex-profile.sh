@@ -11,24 +11,35 @@ usage() {
   cat >&2 <<'EOF'
 用法:
   codex-profile.sh list
-  codex-profile.sh default [codex 参数...]
   codex-profile.sh <profile|配置文件名> [codex 参数...]
 
 路由规则:
-  default             -> default.config.toml + auth.json
+  default                 -> default.config.toml + 共享 auth.json（见下方提醒）
   example                 -> example.config.toml + auth.json.example
   example.config.toml     -> 自动解析 profile example
   config.toml.example     -> 仅把旧名称解析为 profile example，不读取该文件
   auth.json.example       -> 自动解析 profile example
+
+提醒: --profile default 对 Codex 没有任何特殊含义，裸 codex 只读 root config.toml，
+不会读 default.config.toml。但这个脚本把 default 路由的鉴权文件指向共享 auth.json，
+而 codex login 会重写那个文件，所以建议给每个端点单独起名字，登录态交给 root config。
 
 共享会话:
   所有路由直接使用 ~/.codex 作为唯一 CODEX_HOME。
   直接使用固定的 <profile>.config.toml 和 Codex 原生 --profile。
   CODEX_API_KEY 与 OPENAI_API_KEY 都只注入当前进程。
 
+鉴权模式:
+  apikey (默认)  读取路由鉴权文件的 OPENAI_API_KEY，并把该 provider 改成 env_key 鉴权。
+  login          不改写 provider 鉴权，沿用共享 auth.json 的 ChatGPT 登录态。开启方式：
+                 <profile>.auth-mode 内容为 login，或环境变量 CODEX_PROFILE_AUTH=login
+                 （后者优先）。该模式下 provider 表若还带 env_key/base_url 会拒绝启动，
+                 否则会把自己的登录 token 发到第三方端点；官方登录态共享会话请写在
+                 root config.toml 里，让裸 codex 和路由同一个桶。
+
 示例:
   codex-profile.sh list
-  codex-profile.sh default
+  codex-profile.sh example
   codex-profile.sh tmp
   codex-profile.sh .tmp exec -C /tmp --skip-git-repo-check --sandbox read-only "你好"
 
@@ -39,7 +50,7 @@ EOF
 }
 
 list_routes() {
-  local config_path base profile auth_path
+  local config_path base profile auth_path auth_mode_file auth_mode
   shopt -s nullglob
   for config_path in "${codex_root}"/*.config.toml; do
     base="${config_path##*/}"
@@ -50,10 +61,22 @@ list_routes() {
     else
       auth_path="${codex_root}/auth.json.${profile}"
     fi
-    if [[ ! -f "${auth_path}" ]]; then
+    auth_mode="${CODEX_PROFILE_AUTH:-}"
+    if [[ -z "${auth_mode}" ]]; then
+      auth_mode="apikey"
+      auth_mode_file="$(route_auth_mode_file "${profile}")"
+      if [[ -f "${auth_mode_file}" && "$(tr -d '[:space:]' <"${auth_mode_file}")" == "login" ]]; then
+        auth_mode="login"
+      fi
+    fi
+    if [[ ! -f "${auth_path}" && "${auth_mode}" != "login" ]]; then
       continue
     fi
-    printf '  %s -> %s / %s\n' "${profile}" "${base}" "${auth_path##*/}"
+    if [[ "${auth_mode}" == "login" ]]; then
+      printf '  %s -> %s / 共享 auth.json (login)\n' "${profile}" "${base}"
+    else
+      printf '  %s -> %s / %s\n' "${profile}" "${base}" "${auth_path##*/}"
+    fi
   done
   shopt -u nullglob
 }
@@ -75,10 +98,65 @@ read_api_key() {
 
   api_key="$(jq -er '.OPENAI_API_KEY // empty' "${auth_path}")" || {
     echo "鉴权文件缺少 OPENAI_API_KEY: ${auth_path}" >&2
-    echo "当前共享会话模式只支持 API key 鉴权。" >&2
+    echo "登录态路由请写一个 ${profile}.auth-mode 文件（内容为 login）或设置 CODEX_PROFILE_AUTH=login。" >&2
     exit 1
   }
   printf '%s' "${api_key}"
+}
+
+route_auth_mode_file() {
+  printf '%s' "${codex_root}/${1}.auth-mode"
+}
+
+resolve_auth_mode() {
+  local profile="${1}"
+  local auth_path="${2}"
+  local mode="${CODEX_PROFILE_AUTH:-}"
+
+  case "${mode}" in
+    login|apikey)
+      printf '%s' "${mode}"
+      return
+      ;;
+    "")
+      ;;
+    *)
+      echo "CODEX_PROFILE_AUTH 只支持 login 或 apikey，当前为: ${mode}" >&2
+      exit 1
+      ;;
+  esac
+
+  local auth_mode_file
+  auth_mode_file="$(route_auth_mode_file "${profile}")"
+  if [[ -f "${auth_mode_file}" ]]; then
+    mode="$(tr -d '[:space:]' <"${auth_mode_file}")"
+    case "${mode}" in
+      login|apikey)
+        printf '%s' "${mode}"
+        return
+        ;;
+      *)
+        echo "${auth_mode_file} 的内容只支持 login 或 apikey，当前为: ${mode}" >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [[ ! -f "${auth_path}" ]]; then
+    printf 'apikey'
+    return
+  fi
+  if [[ -n "$(jq -r '.OPENAI_API_KEY // empty' "${auth_path}")" ]]; then
+    printf 'apikey'
+    return
+  fi
+  if jq -e 'has("tokens") or (.auth_mode == "chatgpt")' "${auth_path}" >/dev/null 2>&1; then
+    printf 'login'
+    return
+  fi
+  echo "鉴权文件既没有 OPENAI_API_KEY，也不是 ChatGPT 登录态: ${auth_path}" >&2
+  echo "请设置 CODEX_PROFILE_AUTH=login|apikey，或写入 ${profile}.auth-mode。" >&2
+  exit 1
 }
 
 read_model_provider() {
@@ -94,6 +172,29 @@ read_model_provider() {
     exit 1
   fi
   printf '%s' "${provider}"
+}
+
+# login 模式下 Codex 用的是共享 ChatGPT token：provider 表里残留 env_key 会
+# 因为环境变量缺失直接报错，残留 base_url 则会把 token 发到第三方端点。
+provider_keys_forbidden_in_login_mode() {
+  local profile_config="${1}"
+  local provider_id="${2}"
+
+  awk -v id="${provider_id}" '
+    /^[[:space:]]*\[/ {
+      in_table = ($0 ~ "^[[:space:]]*\\[model_providers\\." id "\\][[:space:]]*$")
+      next
+    }
+    in_table && /^[[:space:]]*(env_key|base_url)[[:space:]]*=[[:space:]]*"[^"]/ {
+      key = $0
+      sub(/[[:space:]]*=.*/, "", key)
+      gsub(/^[[:space:]]+/, "", key)
+      value = $0
+      sub(/^[^=]*=[[:space:]]*"/, "", value)
+      sub(/".*/, "", value)
+      print key "\t" value
+    }
+  ' "${profile_config}"
 }
 
 state_database_path() {
@@ -283,20 +384,48 @@ if [[ ! -f "${src_config}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${src_auth}" ]]; then
+auth_mode="$(resolve_auth_mode "${profile}" "${src_auth}")"
+
+if [[ "${auth_mode}" == "apikey" && ! -f "${src_auth}" ]]; then
   echo "鉴权文件不存在: ${src_auth}" >&2
   echo "可用路由:" >&2
   list_routes >&2
   exit 1
 fi
 
-api_key="$(read_api_key "${src_auth}")"
-export CODEX_API_KEY="${api_key}"
-export OPENAI_API_KEY="${api_key}"
-unset api_key
-provider_id="$(read_model_provider "${src_config}")"
-
 export CODEX_HOME="${codex_root}"
+provider_flags=()
+if [[ "${auth_mode}" == "apikey" ]]; then
+  provider_id="$(read_model_provider "${src_config}")"
+  api_key="$(read_api_key "${src_auth}")"
+  export CODEX_API_KEY="${api_key}"
+  export OPENAI_API_KEY="${api_key}"
+  unset api_key
+  provider_flags=(
+    -c "model_providers.${provider_id}.env_key=\"OPENAI_API_KEY\""
+    -c "model_providers.${provider_id}.requires_openai_auth=false"
+  )
+else
+  provider_id="$(read_model_provider "${src_config}")"
+  forbidden="$(provider_keys_forbidden_in_login_mode "${src_config}" "${provider_id}")"
+  if [[ -n "${forbidden}" ]]; then
+    echo "路由 ${profile} 解析为 login 模式，但 ${provider_id} provider 还配置了:" >&2
+    while IFS=$'\t' read -r forbidden_key forbidden_value; do
+      [[ -n "${forbidden_key}" ]] || continue
+      echo "  ${forbidden_key} = \"${forbidden_value}\"" >&2
+    done <<<"${forbidden}"
+    forbidden_url="$(awk -F'\t' '$1 == "base_url" { print $2; exit }' <<<"${forbidden}")"
+    if [[ -n "${forbidden_url}" ]]; then
+      echo "登录态只会带 ChatGPT token，这个端点会收到它: ${forbidden_url}" >&2
+    fi
+    echo "二选一:" >&2
+    echo "  1) 该路由继续走 API key: 把 OPENAI_API_KEY 写回 ${src_auth}" >&2
+    echo "  2) 走登录态共享会话: 用裸 codex（root config 的 provider 表不带 env_key/base_url），或为登录态单独建一个 profile" >&2
+    exit 1
+  fi
+  unset CODEX_API_KEY OPENAI_API_KEY
+fi
+
 CODEX_PROFILE_ARGS=("$@")
 if [[ ${#CODEX_PROFILE_ARGS[@]} -gt 0 && ( "${CODEX_PROFILE_ARGS[0]}" == "resume" || "${CODEX_PROFILE_ARGS[0]}" == "fork" ) ]]; then
   prepare_root_resume "${CODEX_PROFILE_ARGS[@]}"
@@ -305,8 +434,7 @@ fi
 codex_command=(
   "${codex_bin}"
   -c 'shell_environment_policy.ignore_default_excludes=false'
-  -c "model_providers.${provider_id}.env_key=\"OPENAI_API_KEY\""
-  -c "model_providers.${provider_id}.requires_openai_auth=false"
+  "${provider_flags[@]}"
   --disable shell_snapshot
   --profile "${profile}"
   "${CODEX_PROFILE_ARGS[@]}"
